@@ -1,0 +1,21 @@
+{"logical_bytes": 8589934592, "logical_gib": 8.0, "encoded_bytes": 1073280, "extents": 6}
+{
+  "volume_superblocks": [
+    {
+      "at": "0xa2000",
+      "name": "Data",
+      "volume_uuid": "04e7e14d-faa4-4c36-95ca-75390b9bc0fe"
+    },
+    {
+      "at": "0x172000",
+      "name": "Data",
+      "volume_uuid": "04e7e14d-faa4-4c36-95ca-75390b9bc0fe"
+    },
+    {
+      "at": "0x175000",
+      "name": "Data",
+      "volume_uuid": "04e7e14d-faa4-4c36-95ca-75390b9bc0fe"
+    }
+  ]
+}
+{"diskutil_error": "CalledProcessError: Command ['diskutil', 'apfs', 'list', '-plist', '/dev/disk9'] returned non-zero exit status 1."}
