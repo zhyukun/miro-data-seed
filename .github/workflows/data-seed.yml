@@ -41,6 +41,7 @@ jobs:
       DATA_GIB: ${{ inputs.gib || '8' }}
       OS_BUILD: ${{ inputs.build || '21H461' }}
       SKIP_SETUP: ${{ inputs.skip_setup || false }}
+      UNIXNU_DIR: ${{ github.workspace }}/unixnu
     steps:
       - name: Check out UniXNU
         uses: actions/checkout@v4
@@ -92,7 +93,10 @@ jobs:
           df -h /
 
       - name: Read the volume UUID
-        run: python3 self/tools/unpack-seed.py out/data.dbr | tee data-seed-uuid.txt
+        run: |
+          set -o pipefail
+          python3 self/tools/unpack-seed.py out/data.dbr | tee data-seed-uuid.txt
+          test -s data-seed-uuid.txt
 
       - name: Detach the OS volume
         if: always()
