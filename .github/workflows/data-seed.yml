@@ -1,0 +1,111 @@
+name: iPadOS Data seed
+
+on:
+  push:
+    paths-ignore:
+      - 'data/**'
+      - '**.md'
+  workflow_dispatch:
+    inputs:
+      ipsw_url:
+        description: IPSW URL
+        required: true
+        default: https://updates.cdn-apple.com/2025SpringFCS/fullrestores/122-77166/DCA6CFE8-90E9-4B92-880D-3DE171798E40/iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw
+      dmg_name:
+        description: OS image member inside the IPSW
+        required: true
+        default: 044-76040-038.dmg
+      gib:
+        description: Logical size of the Data volume, 3..1024 GiB
+        required: true
+        default: "8"
+      build:
+        description: OS build recorded in the seed
+        required: true
+        default: 21H461
+      skip_setup:
+        description: Mark Setup as done in the seed
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  seed:
+    runs-on: macos-26
+    timeout-minutes: 90
+    env:
+      IPSW_URL: ${{ inputs.ipsw_url || 'https://updates.cdn-apple.com/2025SpringFCS/fullrestores/122-77166/DCA6CFE8-90E9-4B92-880D-3DE171798E40/iPad_Pro_HFR_17.7.11_21H461_Restore.ipsw' }}
+      DMG_NAME: ${{ inputs.dmg_name || '044-76040-038.dmg' }}
+      DATA_GIB: ${{ inputs.gib || '8' }}
+      OS_BUILD: ${{ inputs.build || '21H461' }}
+      SKIP_SETUP: ${{ inputs.skip_setup || false }}
+    steps:
+      - name: Check out UniXNU
+        uses: actions/checkout@v4
+        with:
+          repository: UniXNU/UniXNU
+          path: unixnu
+          fetch-depth: 1
+
+      - name: Check out this repository
+        uses: actions/checkout@v4
+        with:
+          path: self
+
+      - name: Fetch the DarwinBoot packer
+        working-directory: unixnu
+        run: git submodule update --init --depth 1 drivers/DarwinBoot
+
+      - name: Report free space before
+        run: df -h /
+
+      - name: Download the IPSW
+        run: |
+          curl -fL --retry 3 --retry-delay 5 -o "$RUNNER_TEMP/restore.ipsw" "$IPSW_URL"
+          ls -l "$RUNNER_TEMP/restore.ipsw"
+
+      - name: Extract the OS image
+        run: |
+          mkdir -p "$RUNNER_TEMP/os"
+          unzip -o "$RUNNER_TEMP/restore.ipsw" "$DMG_NAME" -d "$RUNNER_TEMP/os"
+          rm -f "$RUNNER_TEMP/restore.ipsw"
+          ls -l "$RUNNER_TEMP/os"
+          df -h /
+
+      - name: Attach the OS volume
+        run: |
+          mkdir -p "$RUNNER_TEMP/os/mnt"
+          hdiutil attach -readonly -nobrowse -mountpoint "$RUNNER_TEMP/os/mnt" "$RUNNER_TEMP/os/$DMG_NAME"
+          test -f "$RUNNER_TEMP/os/mnt/sbin/launchd"
+          test -d "$RUNNER_TEMP/os/mnt/private/var"
+          echo 'OS volume is an IPSW OS volume'
+
+      - name: Build the Data seed
+        run: |
+          mkdir -p out
+          args=(--gib "$DATA_GIB" --build "$OS_BUILD")
+          if [ "$SKIP_SETUP" = "true" ]; then args+=(--skip-setup); fi
+          python3 unixnu/scripts/make-data-seed.py "$RUNNER_TEMP/os/mnt" out/data.dbr "${args[@]}"
+          ls -l out/data.dbr
+          df -h /
+
+      - name: Read the volume UUID
+        run: python3 self/tools/unpack-seed.py out/data.dbr | tee data-seed-uuid.txt
+
+      - name: Detach the OS volume
+        if: always()
+        run: hdiutil detach "$RUNNER_TEMP/os/mnt" || true
+
+      - name: Commit the seed back
+        run: |
+          mkdir -p self/data
+          cp out/data.dbr self/data/data-seed.dbr
+          cp data-seed-uuid.txt self/data/data-seed-uuid.txt
+          cd self
+          git config user.name 'data-seed-bot'
+          git config user.email 'data-seed-bot@users.noreply.github.com'
+          git add data
+          git commit -m "Data seed for $OS_BUILD at ${DATA_GIB} GiB"
+          git push
