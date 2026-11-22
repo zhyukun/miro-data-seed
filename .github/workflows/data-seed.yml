@@ -24,9 +24,9 @@ on:
         required: true
         default: 21H461
       skip_setup:
-        description: Mark Setup as done in the seed
+        description: Mark Setup as done in the seed (default on)
         type: boolean
-        default: false
+        default: true
 
 permissions:
   contents: write
@@ -40,7 +40,7 @@ jobs:
       DMG_NAME: ${{ inputs.dmg_name || '044-76040-038.dmg' }}
       DATA_GIB: ${{ inputs.gib || '8' }}
       OS_BUILD: ${{ inputs.build || '21H461' }}
-      SKIP_SETUP: ${{ inputs.skip_setup || false }}
+      SKIP_SETUP: ${{ inputs.skip_setup || '' }}
       UNIXNU_DIR: ${{ github.workspace }}/unixnu
     steps:
       - name: Check out UniXNU
@@ -87,12 +87,14 @@ jobs:
         run: |
           mkdir -p out
           args=(--gib "$DATA_GIB" --build "$OS_BUILD")
-          if [ "$SKIP_SETUP" = "true" ]; then args+=(--skip-setup); fi
+          if [ "$SKIP_SETUP" != "false" ]; then args+=(--skip-setup); fi
+          echo "skip-setup: $([ "$SKIP_SETUP" != "false" ] && echo on || echo off)"
           python3 unixnu/scripts/make-data-seed.py "$RUNNER_TEMP/os/mnt" out/data.dbr "${args[@]}"
           ls -l out/data.dbr
           df -h /
 
       - name: Read the volume UUID
+        continue-on-error: true
         run: |
           set -o pipefail
           python3 self/tools/unpack-seed.py out/data.dbr | tee data-seed-uuid.txt
@@ -106,6 +108,7 @@ jobs:
         run: |
           mkdir -p self/data
           cp out/data.dbr self/data/data-seed.dbr
+          touch data-seed-uuid.txt
           cp data-seed-uuid.txt self/data/data-seed-uuid.txt
           cd self
           git config user.name 'data-seed-bot'

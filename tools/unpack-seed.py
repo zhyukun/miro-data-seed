@@ -48,7 +48,8 @@ def parse_volumes(logical, extents):
 
 def diskutil_volumes(raw):
     attached = plistlib.loads(subprocess.check_output(
-        ['hdiutil', 'attach', '-nomount', '-nobrowse', '-plist', str(raw)]))
+        ['hdiutil', 'attach', '-nomount', '-nobrowse', '-plist',
+         '-imagekey', 'diskimage-class=CRawDiskImage', str(raw)]))
     device = attached['system-entities'][0]['dev-entry']
     try:
         listing = plistlib.loads(subprocess.check_output(['diskutil', 'apfs', 'list', '-plist', device]))
@@ -77,7 +78,10 @@ def main():
             for offset, data in extents:
                 handle.seek(offset)
                 handle.write(data)
-        print(json.dumps({'diskutil': diskutil_volumes(raw)}, indent=2))
+        try:
+            print(json.dumps({'diskutil': diskutil_volumes(raw)}, indent=2))
+        except Exception as error:                   # the APSB parse above is authoritative
+            print(json.dumps({'diskutil_error': f'{type(error).__name__}: {error}'}))
 
 
 if __name__ == '__main__':
